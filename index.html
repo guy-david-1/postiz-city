@@ -164,8 +164,19 @@ body.touch #sub{bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:42
 (() => {
 'use strict';
 const T = THREE;
-const isTouch = /[?&]touch=1/.test(location.search) || (window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches) || (navigator.maxTouchPoints > 0 && !matchMedia('(hover: hover)').matches);
+// Touch mode: detected up front where possible, and switched on by the first real touch regardless
+// (in-app browsers and "desktop site" mode on iPhone can misreport hover/pointer).
+const mq = q => { try { return !!(window.matchMedia && matchMedia(q).matches); } catch (e) { return false; } };
+let isTouch = /[?&]touch=1/.test(location.search) || mq('(hover: none) and (pointer: coarse)') || mq('(any-pointer: coarse)') ||
+  ('ontouchstart' in window && navigator.maxTouchPoints > 0) || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+  (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 if (isTouch) document.body.classList.add('touch');
+function enableTouch() {
+  if (isTouch) return; isTouch = true; document.body.classList.add('touch');
+  if (typeof refreshTouchUI === 'function') refreshTouchUI();
+}
+addEventListener('touchstart', enableTouch, { passive: true, capture: true });
+addEventListener('pointerdown', e => { if (e.pointerType === 'touch') enableTouch(); }, { passive: true, capture: true });
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -1308,9 +1319,15 @@ function buildChapters() {
   const un = store.get('pc_unlocked', 0); const c = $('chapters'); c.innerHTML = '';
   MISSIONS.forEach((m, i) => { if (i === 0 || i <= un) { const b = document.createElement('button'); b.textContent = `${i + 1} · ${m.title}`; b.onclick = () => { initAudio(); startMission(i); }; c.appendChild(b); } });
 }
+const TOUCH_HELP = 'Left thumb: steer / walk · <b>GAS</b> <b>BRAKE</b> <b>DRIFT</b> · <b>CAR</b> to get in or out · drag the screen to look around';
 $('keysHelp').innerHTML = isTouch
   ? 'Left thumb: steer / walk · <b>GAS</b> <b>BRAKE</b> <b>DRIFT</b> · <b>CAR</b> to get in or out · drag the screen to look around'
   : '<b>WASD</b> drive / walk · <b>SPACE</b> handbrake drift / jump · <b>SHIFT</b> sprint · <b>E</b> enter / exit · <b>R</b> retry or reset van · <b>M</b> mute · drag to look';
+function refreshTouchUI() {
+  $('keysHelp').innerHTML = TOUCH_HELP;
+  if (gstate !== 'title') $('touch').hidden = false;
+  const o = $('mObj'); if (/\[E\]/.test(o.textContent)) o.textContent = 'Get in the van (tap CAR)';
+}
 function play() { initAudio(); startMission(0); }
 function openMenu() { if (gstate === 'title') return; buildChapters(); $('title').hidden = false; $('play').textContent = 'RESTART'; prevState = gstate; gstate = 'title'; menuFromGame = true; }
 let prevState = null, menuFromGame = false;
